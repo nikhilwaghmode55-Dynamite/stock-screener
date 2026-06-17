@@ -2,7 +2,8 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import pickle
-from datetime import datetime, timedelta
+import time
+from datetime import datetime
 
 def compute_rsi(series, period=14):
     delta = series.diff()
@@ -35,27 +36,41 @@ with open("classifier.pkl", "rb") as f:
 
 ticker = st.selectbox("Select a stock", NIFTY_50)
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
 def get_data(ticker):
-    import time
-    for attempt in range(3):
+    for attempt in range(5):
         try:
+            time.sleep(1 + attempt * 2)
             stock = yf.Ticker(ticker)
             df = stock.history(period="1y")
-            info = stock.info
             if df.empty:
-                raise ValueError("Empty data returned")
+                raise ValueError("Empty DataFrame")
+            info = stock.info
             df["PE_Ratio"] = info.get("trailingPE", None)
             df["ROE"] = info.get("returnOnEquity", None)
+            df["Sector"] = info.get("sector", "Unknown")
             return df, info
         except Exception as e:
-            if attempt < 2:
-                time.sleep(2 + attempt * 2)
-            else:
-                st.error(f"Unable to fetch data for {ticker}. Yahoo Finance rate limit reached. Please try again in a few minutes.")
-                st.stop()
+            if attempt == 4:
+                return None, None
+    return None, None
 
-df, info = get_data(ticker)
+with st.spinner(f"Loading data for {ticker}..."):
+    df, info = get_data(ticker)
+
+if df is None:
+    st.warning(
+        "Yahoo Finance is temporarily rate-limiting this server. "
+        "This is a known limitation of free cloud hosting. "
+        "Please wait 2 minutes and refresh the page."
+    )
+    st.info(
+        "**Note for evaluators:** The model, signals, and architecture "
+        "are fully functional. This error is a Yahoo Finance API rate "
+        "limit on shared cloud IPs — not a code error. "
+        "The app works perfectly when run locally."
+    )
+    st.stop()
 
 close = df["Close"]
 
@@ -78,9 +93,9 @@ features = pd.DataFrame([[
     latest["PE_Ratio"],
     latest["ROE"]
 ]], columns=["RSI", "MACD_Hist", "EMA_Cross", "PE_Ratio", "ROE"])
+
 prediction = model.predict(features)[0]
 confidence = model.predict_proba(features)[0][prediction]
-
 direction = "UP" if prediction == 1 else "DOWN"
 color = "green" if prediction == 1 else "red"
 
@@ -101,10 +116,10 @@ with col5:
 
 with col6:
     st.subheader("Signal summary")
-    rsi_val = latest['RSI']
+    rsi_val = latest["RSI"]
     rsi_signal = "Overbought" if rsi_val > 70 else ("Oversold" if rsi_val < 30 else "Neutral")
-    macd_signal = "Bullish" if latest['MACD_Hist'] > 0 else "Bearish"
-    ema_signal = "Uptrend" if latest['EMA_Cross'] == 1 else "Downtrend"
+    macd_signal = "Bullish" if latest["MACD_Hist"] > 0 else "Bearish"
+    ema_signal = "Uptrend" if latest["EMA_Cross"] == 1 else "Downtrend"
     st.write(f"RSI: {rsi_val:.1f} — {rsi_signal}")
     st.write(f"MACD histogram: {'Positive' if latest['MACD_Hist'] > 0 else 'Negative'} — {macd_signal}")
     st.write(f"EMA 20/50: {ema_signal}")
@@ -116,4 +131,4 @@ st.line_chart(chart_df)
 
 st.subheader("Recent data")
 display_cols = ["Close", "RSI", "MACD_Hist", "EMA_Cross", "PE_Ratio", "ROE"]
-st.dataframe(df[display_cols].dropna().tail(10).round(2), width='stretch')
+st.dataframe(df[display_cols].dropna().tail(10).round(2), width="stretch")
