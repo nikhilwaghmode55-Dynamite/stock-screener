@@ -37,12 +37,23 @@ ticker = st.selectbox("Select a stock", NIFTY_50)
 
 @st.cache_data(ttl=3600)
 def get_data(ticker):
-    stock = yf.Ticker(ticker)
-    df = stock.history(period="1y")
-    info = stock.info
-    df["PE_Ratio"] = info.get("trailingPE", None)
-    df["ROE"] = info.get("returnOnEquity", None)
-    return df, info
+    import time
+    for attempt in range(3):
+        try:
+            stock = yf.Ticker(ticker)
+            df = stock.history(period="1y")
+            info = stock.info
+            if df.empty:
+                raise ValueError("Empty data returned")
+            df["PE_Ratio"] = info.get("trailingPE", None)
+            df["ROE"] = info.get("returnOnEquity", None)
+            return df, info
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2 + attempt * 2)
+            else:
+                st.error(f"Unable to fetch data for {ticker}. Yahoo Finance rate limit reached. Please try again in a few minutes.")
+                st.stop()
 
 df, info = get_data(ticker)
 
