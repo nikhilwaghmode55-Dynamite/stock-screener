@@ -35,45 +35,42 @@ for ticker in NIFTY_50:
         stock = yf.Ticker(ticker)
         df = stock.history(period="1y")
         if df.empty:
-            print(f"  Skipping {ticker} — no data")
             continue
         info = stock.info
         close = df["Close"]
         rsi = compute_rsi(close)
+        
         ema12 = close.ewm(span=12, adjust=False).mean()
         ema26 = close.ewm(span=26, adjust=False).mean()
         macd_line = ema12 - ema26
         signal_line = macd_line.ewm(span=9, adjust=False).mean()
         macd_hist = macd_line - signal_line
+        
         ema20 = close.ewm(span=20, adjust=False).mean()
         ema50 = close.ewm(span=50, adjust=False).mean()
         ema_cross = (ema20 > ema50).astype(int)
         
-        latest_close = float(close.iloc[-1])
-        latest_rsi = float(rsi.dropna().iloc[-1])
-        latest_macd = float(macd_hist.dropna().iloc[-1])
-        latest_ema_cross = int(ema_cross.iloc[-1])
-        
-        pe = info.get("trailingPE", None)
-        roe = info.get("returnOnEquity", None)
-        sector = info.get("sector", "Unknown")
+        return_3d = close.pct_change(3)
+        price_vs_ema20 = (close - ema20) / ema20
+        volatility_10d = close.pct_change().rolling(10).std()
         
         results.append({
             "Ticker": ticker,
-            "Close": round(latest_close, 2),
-            "RSI": round(latest_rsi, 2),
-            "MACD_Hist": round(latest_macd, 4),
-            "EMA_Cross": latest_ema_cross,
-            "PE_Ratio": round(pe, 2) if pe else None,
-            "ROE": round(roe, 4) if roe else None,
-            "Sector": sector,
+            "Close": round(float(close.iloc[-1]), 2),
+            "RSI": round(float(rsi.dropna().iloc[-1]), 2),
+            "MACD_Hist": round(float(macd_hist.dropna().iloc[-1]), 4),
+            "EMA_Cross": int(ema_cross.iloc[-1]),
+            "PE_Ratio": round(info.get("trailingPE"), 2) if info.get("trailingPE") else None,
+            "ROE": round(info.get("returnOnEquity"), 4) if info.get("returnOnEquity") else None,
+            "Return_3d": round(float(return_3d.dropna().iloc[-1]), 4),
+            "Price_vs_EMA20": round(float(price_vs_ema20.dropna().iloc[-1]), 4),
+            "Volatility_10d": round(float(volatility_10d.dropna().iloc[-1]), 4),
+            "Sector": info.get("sector", "Unknown"),
             "Last_Updated": pd.Timestamp.now().strftime("%Y-%m-%d")
         })
-        print(f"  Done — RSI: {latest_rsi:.1f}, Close: ₹{latest_close:.2f}")
     except Exception as e:
-        print(f"  Error for {ticker}: {e}")
-        continue
+        print(f"Error for {ticker}: {e}")
 
 output = pd.DataFrame(results)
 output.to_csv("precomputed_signals.csv", index=False)
-print(f"\nSaved {len(results)} stocks to precomputed_signals.csv")
+print(f"Saved {len(results)} stocks to precomputed_signals.csv")
