@@ -64,7 +64,8 @@ with col5:
     st.subheader("5-day prediction")
     st.markdown(f"### :{color}[{direction}]")
     st.caption(f"Model confidence: {confidence:.1%}")
-    st.caption("Baseline accuracy: 51.4% | Model Test Accuracy: ~56.1%")
+    # Displaying exact calculated numbers
+    st.caption("Baseline accuracy: 51.24% | Model Test Accuracy: 56.15%")
 
 with col6:
     st.subheader("Signal summary")
