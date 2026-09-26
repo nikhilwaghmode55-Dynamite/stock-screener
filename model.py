@@ -17,9 +17,9 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 # Optimized Random Forest parameters to target ~60% accuracy
 model = RandomForestClassifier(
-    n_estimators=200,
-    max_depth=5,
-    min_samples_split=20,
+    n_estimators=300,        # Increased trees for better pattern recognition
+    max_depth=4,             # Kept shallow to prevent overfitting on noisy stock data
+    min_samples_split=30,    # Higher split threshold for better generalization
     random_state=42
 )
 
