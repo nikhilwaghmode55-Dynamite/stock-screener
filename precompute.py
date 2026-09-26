@@ -5,10 +5,10 @@ import time
 
 def compute_rsi(series, period=14):
     delta = series.diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
@@ -19,10 +19,11 @@ NIFTY_50 = [
     "TITAN.NS", "ULTRACEMCO.NS", "BAJFINANCE.NS", "WIPRO.NS", "ONGC.NS",
     "NTPC.NS", "POWERGRID.NS", "TECHM.NS", "HCLTECH.NS", "M&M.NS",
     "TATASTEEL.NS", "JSWSTEEL.NS", "ADANIENT.NS", "ADANIPORTS.NS",
-    "COALINDIA.NS", "BAJAJFINSV.NS", "DIVISLAB.NS", "DRREDDY.NS", "CIPLA.NS",
-    "EICHERMOT.NS", "HEROMOTOCO.NS", "BPCL.NS", "BRITANNIA.NS", "GRASIM.NS",
-    "HINDALCO.NS", "INDUSINDBK.NS", "NESTLEIND.NS", "SBILIFE.NS", "HDFCLIFE.NS",
-    "APOLLOHOSP.NS", "BAJAJ-AUTO.NS", "TATACONSUM.NS", "UPL.NS"
+    "COALINDIA.NS", "BAJAJFINSV.NS", "DRREDDY.NS", "CIPLA.NS",
+    "EICHERMOT.NS", "GRASIM.NS", "HINDALCO.NS", "NESTLEIND.NS", 
+    "SBILIFE.NS", "HDFCLIFE.NS", "APOLLOHOSP.NS", "BAJAJ-AUTO.NS", 
+    "TATACONSUM.NS", "ETERNAL.NS", "TRENT.NS", "JIOFIN.NS", 
+    "MAXHEALTH.NS", "INDIGO.NS", "BEL.NS", "SHRIRAMFIN.NS", "TMPV.NS"
 ]
 
 results = []
@@ -47,13 +48,16 @@ for ticker in NIFTY_50:
         ema20 = close.ewm(span=20, adjust=False).mean()
         ema50 = close.ewm(span=50, adjust=False).mean()
         ema_cross = (ema20 > ema50).astype(int)
+        
         latest_close = float(close.iloc[-1])
         latest_rsi = float(rsi.dropna().iloc[-1])
         latest_macd = float(macd_hist.dropna().iloc[-1])
         latest_ema_cross = int(ema_cross.iloc[-1])
+        
         pe = info.get("trailingPE", None)
         roe = info.get("returnOnEquity", None)
         sector = info.get("sector", "Unknown")
+        
         results.append({
             "Ticker": ticker,
             "Close": round(latest_close, 2),
@@ -73,4 +77,3 @@ for ticker in NIFTY_50:
 output = pd.DataFrame(results)
 output.to_csv("precomputed_signals.csv", index=False)
 print(f"\nSaved {len(results)} stocks to precomputed_signals.csv")
-print(output[["Ticker", "Close", "RSI", "MACD_Hist", "EMA_Cross"]].to_string())

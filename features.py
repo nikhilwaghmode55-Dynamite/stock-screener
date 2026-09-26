@@ -3,10 +3,13 @@ import numpy as np
 
 def compute_rsi(series, period=14):
     delta = series.diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    
+    # Wilder's Smoothing method (RMA) used by TradingView and discount brokers
+    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
+    
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
     return rsi
@@ -19,7 +22,6 @@ def compute_features(df):
 
     for ticker, group in df.groupby("Ticker"):
         group = group.copy()
-
         close = group["Close"]
 
         group["RSI"] = compute_rsi(close)
@@ -48,5 +50,6 @@ def compute_features(df):
     print(f"Done. {len(final)} rows saved to features.csv")
     print(f"Target distribution:\n{final['Target'].value_counts()}")
 
-df = pd.read_csv("raw_data.csv")
-compute_features(df)
+if __name__ == "__main__":
+    df = pd.read_csv("raw_data.csv")
+    compute_features(df)
