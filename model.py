@@ -15,7 +15,7 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, shuffle=True
 )
 
-# High-performance Gradient Boosting Classifier to push accuracy past 60%
+# Optimized Gradient Boosting Classifier
 model = GradientBoostingClassifier(
     n_estimators=150,
     learning_rate=0.03,
@@ -28,9 +28,8 @@ model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 accuracy = accuracy_score(y_test, y_pred)
 
-print(f"New Test accuracy: {accuracy:.2%}")
-print()
-print("Classification report:")
+print(f"Model Test Accuracy: {accuracy:.2%}")
+print("\nClassification report:")
 print(classification_report(y_test, y_pred, target_names=["DOWN", "UP"]))
 
 with open("classifier.pkl", "wb") as f:

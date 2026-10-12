@@ -1,7 +1,7 @@
 import yfinance as yf
 import pandas as pd
 
-# Updated Real-Time Nifty 50 Ticker List
+# Upgraded Nifty 50 Ticker List (removed delisted UPL, added Trent, Jio Finance, etc.)
 NIFTY_50 = [
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
     "HINDUNILVR.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS",
@@ -21,26 +21,32 @@ def fetch_all():
 
     for ticker in NIFTY_50:
         print(f"Fetching {ticker}...")
-        stock = yf.Ticker(ticker)
-        # Fetching historical data strictly from April 2025 to April 2026
-        df = stock.history(start="2025-04-01", end="2026-04-30")
+        try:
+            stock = yf.Ticker(ticker)
+            df = stock.history(start="2025-04-01", end="2026-04-30")
 
-        if df.empty:
-            print(f"  Skipping {ticker} — no data returned")
-            continue
+            if df.empty:
+                print(f"  Skipping {ticker} — no data returned")
+                continue
 
-        df["Ticker"] = ticker
+            df = df.reset_index()
+            df["Ticker"] = ticker
 
-        info = stock.info
-        df["PE_Ratio"] = info.get("trailingPE", None)
-        df["ROE"] = info.get("returnOnEquity", None)
-        df["Sector"] = info.get("sector", "Unknown")
+            info = stock.info
+            df["PE_Ratio"] = info.get("trailingPE", None)
+            df["ROE"] = info.get("returnOnEquity", None)
+            df["Sector"] = info.get("sector", "Unknown")
 
-        all_data.append(df)
+            all_data.append(df)
+        except Exception as e:
+            print(f"Error fetching {ticker}: {e}")
 
-    combined = pd.concat(all_data)
-    combined.to_csv("raw_data.csv")
-    print(f"\nDone. Saved {len(all_data)} stocks to raw_data.csv")
+    if all_data:
+        combined = pd.concat(all_data, ignore_index=True)
+        combined.to_csv("raw_data.csv", index=False)
+        print(f"\nDone. Saved {len(all_data)} stocks to raw_data.csv")
+    else:
+        print("No data fetched.")
 
 if __name__ == "__main__":
     fetch_all()

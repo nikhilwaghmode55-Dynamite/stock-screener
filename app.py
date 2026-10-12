@@ -7,7 +7,6 @@ st.set_page_config(page_title="Nifty 50 Signal Screener", layout="wide")
 st.title("Nifty 50 — Technical Signal Screener")
 st.caption("Predicts 5-day return direction using advanced momentum features, RSI, MACD, P/E and ROE")
 
-# Load model and precomputed signals safely
 @st.cache_resource
 def load_artifacts():
     if not os.path.exists("classifier.pkl") or not os.path.exists("precomputed_signals.csv"):
@@ -23,7 +22,7 @@ if model is None or signals_df is None:
     st.error("Model artifacts or precomputed signals missing. Please run precompute.py / model.py.")
     st.stop()
 
-# Standardize column names to avoid case mismatches
+# Standardize column names to prevent casing errors
 signals_df.columns = [col.strip() for col in signals_df.columns]
 if "ticker" in signals_df.columns and "Ticker" not in signals_df.columns:
     signals_df.rename(columns={"ticker": "Ticker"}, inplace=True)
@@ -48,7 +47,7 @@ if data is None:
     st.warning(f"No data available for {ticker}")
     st.stop()
 
-# Extract price safely (handling case variants)
+# Safe price extraction preventing NaN display
 close_price = data.get("Close", data.get("close", None))
 price_str = f"₹{close_price:.2f}" if pd.notna(close_price) else "N/A"
 
@@ -58,7 +57,6 @@ sector_val = data.get("Sector", data.get("sector", "Unknown"))
 macd_hist = data.get("MACD_Hist", data.get("macd_hist", 0.0))
 ema_cross = data.get("EMA_Cross", data.get("ema_cross", 0))
 
-# Build prediction input matching the 8 trained features
 prediction_input = pd.DataFrame([[
     rsi_val,
     macd_hist,
