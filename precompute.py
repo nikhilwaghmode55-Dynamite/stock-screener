@@ -53,6 +53,9 @@ for ticker in NIFTY_50:
         price_vs_ema20 = (close - ema20) / ema20
         volatility_10d = close.pct_change().rolling(10).std()
         
+        # Extract the exact market date of the last available candle
+        last_market_date = df.index[-1].strftime("%Y-%m-%d")
+        
         results.append({
             "Ticker": ticker,
             "Close": round(float(close.iloc[-1]), 2),
@@ -65,11 +68,11 @@ for ticker in NIFTY_50:
             "Price_vs_EMA20": round(float(price_vs_ema20.dropna().iloc[-1]), 4),
             "Volatility_10d": round(float(volatility_10d.dropna().iloc[-1]), 4),
             "Sector": info.get("sector", "Unknown"),
-            "Last_Updated": pd.Timestamp.now().strftime("%Y-%m-%d")
+            "Last_Updated": last_market_date
         })
     except Exception as e:
         print(f"Error for {ticker}: {e}")
 
 output = pd.DataFrame(results)
 output.to_csv("precomputed_signals.csv", index=False)
-print(f"Saved {len(results)} stocks to precomputed_signals.csv")
+print(f"Saved {len(results)} stocks to precomputed_signals.csv with accurate market dates.")
