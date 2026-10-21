@@ -8,16 +8,22 @@ st.set_page_config(page_title="Nifty 50 Signal Screener", layout="wide")
 st.title("Nifty 50 — Technical Signal Screener")
 st.caption("Predicts 5-day return direction using advanced momentum features, RSI, MACD, P/E and ROE")
 
+# Load model (cached since pickle doesn't change)
 @st.cache_resource
-def load_artifacts():
-    if not os.path.exists("classifier.pkl") or not os.path.exists("precomputed_signals.csv"):
-        return None, None
+def load_model():
+    if not os.path.exists("classifier.pkl"):
+        return None
     with open("classifier.pkl", "rb") as f:
-        model = pickle.load(f)
-    signals_df = pd.read_csv("precomputed_signals.csv")
-    return model, signals_df
+        return pickle.load(f)
 
-model, signals_df = load_artifacts()
+# Load signals WITHOUT caching so disk updates reflect immediately
+def load_signals():
+    if not os.path.exists("precomputed_signals.csv"):
+        return None
+    return pd.read_csv("precomputed_signals.csv")
+
+model = load_model()
+signals_df = load_signals()
 
 if model is None or signals_df is None:
     st.error("Model artifacts or precomputed signals missing. Please run precompute.py / model.py.")
@@ -45,13 +51,13 @@ def get_next_trading_day_str():
     now = datetime.now()
     weekday = now.weekday() # 0=Mon, 4=Fri, 5=Sat, 6=Sun
     
-    if weekday == 4: # Friday -> Next trading day is Monday (+3 days)
+    if weekday == 4: # Friday -> Monday (+3 days)
         next_day = now + timedelta(days=3)
-    elif weekday == 5: # Saturday -> Next trading day is Monday (+2 days)
+    elif weekday == 5: # Saturday -> Monday (+2 days)
         next_day = now + timedelta(days=2)
-    elif weekday == 6: # Sunday -> Next trading day is Monday (+1 day)
+    elif weekday == 6: # Sunday -> Monday (+1 day)
         next_day = now + timedelta(days=1)
-    else: # Mon-Thu -> Next trading day is tomorrow (+1 day)
+    else: # Mon-Thu -> Tomorrow (+1 day)
         next_day = now + timedelta(days=1)
         
     return next_day.strftime("%d/%m/%Y")
@@ -59,7 +65,6 @@ def get_next_trading_day_str():
 last_updated = signals_df["Last_Updated"].iloc[0] if "Last_Updated" in signals_df.columns else "Unknown"
 next_update_date = get_next_trading_day_str()
 
-# Exact caption format requested
 st.caption(f"Data last updated: {last_updated} | Next update: {next_update_date} at 4:00 PM IST (Post-Market Close)")
 
 data = get_ticker_data(signals_df, ticker)
