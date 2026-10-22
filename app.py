@@ -46,11 +46,14 @@ def get_ticker_data(df, ticker):
         return None
     return row.iloc[0]
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, timezone, timedelta, time
 
-# Dynamic Next Update Calculation (Handling Time of Day & Weekends)
+# Define explicit Indian Standard Time (UTC + 5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
+
 def get_next_trading_day_str():
-    now = datetime.now()
+    # Force the datetime object to evaluate in IST, regardless of cloud server location
+    now = datetime.now(IST)
     weekday = now.weekday() # 0=Mon, 4=Fri, 5=Sat, 6=Sun
     market_close_time = time(16, 0) # 4:00 PM IST
     
