@@ -2,13 +2,27 @@ import streamlit as st
 import pandas as pd
 import pickle
 import os
-from datetime import datetime, timedelta
+import yfinance as yf
+from datetime import datetime, timedelta, time, timezone
 
 st.set_page_config(page_title="Nifty 50 Signal Screener", layout="wide")
 st.title("Nifty 50 — Technical Signal Screener")
 st.caption("Predicts 5-day return direction using advanced momentum features, RSI, MACD, P/E and ROE")
 
-# Load model (cached since pickle doesn't change)
+NIFTY_50 = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
+    "HINDUNILVR.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "KOTAKBANK.NS",
+    "LT.NS", "AXISBANK.NS", "ASIANPAINT.NS", "MARUTI.NS", "SUNPHARMA.NS",
+    "TITAN.NS", "ULTRACEMCO.NS", "BAJFINANCE.NS", "WIPRO.NS", "ONGC.NS",
+    "NTPC.NS", "POWERGRID.NS", "TECHM.NS", "HCLTECH.NS", "M&M.NS",
+    "TATASTEEL.NS", "JSWSTEEL.NS", "ADANIENT.NS", "ADANIPORTS.NS",
+    "COALINDIA.NS", "BAJAJFINSV.NS", "DRREDDY.NS", "CIPLA.NS",
+    "EICHERMOT.NS", "GRASIM.NS", "HINDALCO.NS", "NESTLEIND.NS", 
+    "SBILIFE.NS", "HDFCLIFE.NS", "APOLLOHOSP.NS", "BAJAJ-AUTO.NS", 
+    "TATACONSUM.NS", "ETERNAL.NS", "TRENT.NS", "JIOFIN.NS", 
+    "MAXHEALTH.NS", "INDIGO.NS", "BEL.NS", "SHRIRAMFIN.NS", "TMPV.NS"
+]
+
 @st.cache_resource
 def load_model():
     if not os.path.exists("classifier.pkl"):
@@ -16,90 +30,115 @@ def load_model():
     with open("classifier.pkl", "rb") as f:
         return pickle.load(f)
 
-# Load signals WITHOUT caching so disk updates reflect immediately
-def load_signals():
-    if not os.path.exists("precomputed_signals.csv"):
-        return None
-    return pd.read_csv("precomputed_signals.csv")
-
 model = load_model()
-signals_df = load_signals()
-
-if model is None or signals_df is None:
-    st.error("Model artifacts or precomputed signals missing. Please run precompute.py / model.py.")
+if model is None:
+    st.error("Model artifacts missing. Please ensure classifier.pkl is present.")
     st.stop()
 
-# Standardize column names
-signals_df.columns = [col.strip() for col in signals_df.columns]
-if "ticker" in signals_df.columns and "Ticker" not in signals_df.columns:
-    signals_df.rename(columns={"ticker": "Ticker"}, inplace=True)
-if "close" in signals_df.columns and "Close" not in signals_df.columns:
-    signals_df.rename(columns={"close": "Close"}, inplace=True)
-
-NIFTY_50 = signals_df["Ticker"].tolist() if "Ticker" in signals_df.columns else []
+@st.cache_data(ttl=3600)
+def get_live_signals(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        df = stock.history(period="1y")
+        if df.empty:
+            return None
+            
+        info = stock.info
+        close = df["Close"]
+        
+        delta = close.diff()
+        gain = delta.where(delta > 0, 0.0)
+        loss = -delta.where(delta < 0, 0.0)
+        avg_gain = gain.ewm(alpha=1/14, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1/14, adjust=False).mean()
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        
+        ema12 = close.ewm(span=12, adjust=False).mean()
+        ema26 = close.ewm(span=26, adjust=False).mean()
+        macd_line = ema12 - ema26
+        signal_line = macd_line.ewm(span=9, adjust=False).mean()
+        macd_hist = macd_line - signal_line
+        
+        ema20 = close.ewm(span=20, adjust=False).mean()
+        ema50 = close.ewm(span=50, adjust=False).mean()
+        ema_cross = (ema20 > ema50).astype(int)
+        
+        return_3d = close.pct_change(3)
+        price_vs_ema20 = (close - ema20) / ema20
+        volatility_10d = close.pct_change().rolling(10).std()
+        
+        last_market_date = df.index[-1].strftime("%Y-%m-%d")
+        
+        return {
+            "Ticker": ticker,
+            "Close": float(close.iloc[-1]),
+            "RSI": float(rsi.dropna().iloc[-1]),
+            "MACD_Hist": float(macd_hist.dropna().iloc[-1]),
+            "EMA_Cross": int(ema_cross.iloc[-1]),
+            "PE_Ratio": info.get("trailingPE", None),
+            "ROE": info.get("returnOnEquity", None),
+            "Return_3d": float(return_3d.dropna().iloc[-1]),
+            "Price_vs_EMA20": float(price_vs_ema20.dropna().iloc[-1]),
+            "Volatility_10d": float(volatility_10d.dropna().iloc[-1]),
+            "Sector": info.get("sector", "Unknown"),
+            "Last_Updated": last_market_date
+        }
+    except Exception:
+        return None
 
 ticker = st.selectbox("Select a stock", NIFTY_50)
+data = get_live_signals(ticker)
 
-def get_ticker_data(df, ticker):
-    row = df[df["Ticker"] == ticker]
-    if row.empty:
-        return None
-    return row.iloc[0]
-
-from datetime import datetime, timezone, timedelta, time
-
-# Define explicit Indian Standard Time (UTC + 5:30)
 IST = timezone(timedelta(hours=5, minutes=30))
 
 def get_next_trading_day_str():
-    # Force the datetime object to evaluate in IST, regardless of cloud server location
     now = datetime.now(IST)
-    weekday = now.weekday() # 0=Mon, 4=Fri, 5=Sat, 6=Sun
-    market_close_time = time(16, 0) # 4:00 PM IST
+    weekday = now.weekday()
+    market_close_time = time(16, 0)
     
-    if weekday < 5: # Monday to Friday
+    if weekday < 5:
         if now.time() < market_close_time:
-            next_day = now # Update happens later today!
+            next_day = now
         else:
-            if weekday == 4: # Friday after 4 PM -> Monday (+3 days)
+            if weekday == 4:
                 next_day = now + timedelta(days=3)
-            else: # Mon-Thu after 4 PM -> Tomorrow (+1 day)
+            else:
                 next_day = now + timedelta(days=1)
-    elif weekday == 5: # Saturday -> Monday (+2 days)
+    elif weekday == 5:
         next_day = now + timedelta(days=2)
-    else: # Sunday -> Monday (+1 day)
+    else:
         next_day = now + timedelta(days=1)
         
     return next_day.strftime("%d/%m/%Y")
 
-last_updated = signals_df["Last_Updated"].iloc[0] if "Last_Updated" in signals_df.columns else "Unknown"
 next_update_date = get_next_trading_day_str()
 
-st.caption(f"Data last updated: {last_updated} | Next update: {next_update_date} at 4:00 PM IST (Post-Market Close)")
-
-data = get_ticker_data(signals_df, ticker)
 if data is None:
     st.warning(f"No data available for {ticker}")
     st.stop()
 
-close_price = data.get("Close", data.get("close", None))
+last_updated = data.get("Last_Updated", "Unknown")
+st.caption(f"Data last updated: {last_updated} | Next update: {next_update_date} at 4:00 PM IST (Post-Market Close)")
+
+close_price = data.get("Close", None)
 price_str = f"₹{close_price:.2f}" if pd.notna(close_price) else "N/A"
 
-rsi_val = data.get("RSI", data.get("rsi", 50.0))
-pe_val = data.get("PE_Ratio", data.get("pe_ratio", None))
-sector_val = data.get("Sector", data.get("sector", "Unknown"))
-macd_hist = data.get("MACD_Hist", data.get("macd_hist", 0.0))
-ema_cross = data.get("EMA_Cross", data.get("ema_cross", 0))
+rsi_val = data.get("RSI", 50.0)
+pe_val = data.get("PE_Ratio", None)
+sector_val = data.get("Sector", "Unknown")
+macd_hist = data.get("MACD_Hist", 0.0)
+ema_cross = data.get("EMA_Cross", 0)
 
 prediction_input = pd.DataFrame([[
     rsi_val,
     macd_hist,
     ema_cross,
     pe_val if pd.notna(pe_val) else 0.0,
-    data.get("ROE", 0.0) if pd.notna(data.get("ROE", 0.0)) else 0.0,
-    data.get("Return_3d", 0.0) if pd.notna(data.get("Return_3d", 0.0)) else 0.0,
-    data.get("Price_vs_EMA20", 0.0) if pd.notna(data.get("Price_vs_EMA20", 0.0)) else 0.0,
-    data.get("Volatility_10d", 0.0) if pd.notna(data.get("Volatility_10d", 0.0)) else 0.0
+    data.get("ROE") if pd.notna(data.get("ROE")) else 0.0,
+    data.get("Return_3d") if pd.notna(data.get("Return_3d")) else 0.0,
+    data.get("Price_vs_EMA20") if pd.notna(data.get("Price_vs_EMA20")) else 0.0,
+    data.get("Volatility_10d") if pd.notna(data.get("Volatility_10d")) else 0.0
 ]], columns=["RSI", "MACD_Hist", "EMA_Cross", "PE_Ratio", "ROE", "Return_3d", "Price_vs_EMA20", "Volatility_10d"])
 
 prediction = model.predict(prediction_input)[0]
