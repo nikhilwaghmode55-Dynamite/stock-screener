@@ -1,37 +1,37 @@
-name: Daily Signal Update
+name: Daily Market Data Update
 
 on:
   schedule:
-    # Runs at 10:30 UTC Monday-Friday, exactly 4:00 PM IST (16:00 IST) post-market
+    # 10:30 UTC is exactly 4:00 PM IST. 1-5 means Monday through Friday.
     - cron: '30 10 * * 1-5'
-  workflow_dispatch:
+  workflow_dispatch: # Allows you to click a button on GitHub to test it manually
 
 jobs:
   update-signals:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install yfinance pandas
 
-      - name: Run precompute script
-        run: python precompute.py
+    - name: Run daily fetcher
+      run: python precompute.py
 
-      - name: Commit and push updated signals
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add precomputed_signals.csv
-          git commit -m "Automated post-market signal update [skip ci]" || echo "No changes to commit"
-          git push
+    - name: Commit and Push new data
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add precomputed_signals.csv
+        # Only commit if the data actually changed
+        git diff --quiet && git diff --staged --quiet || git commit -m "Automated post-market data update"
+        git push
