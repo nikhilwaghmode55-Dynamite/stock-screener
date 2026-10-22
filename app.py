@@ -46,18 +46,25 @@ def get_ticker_data(df, ticker):
         return None
     return row.iloc[0]
 
-# Dynamic Next Trading Day Calculation (Handling Weekends)
+from datetime import datetime, time, timedelta
+
+# Dynamic Next Update Calculation (Handling Time of Day & Weekends)
 def get_next_trading_day_str():
     now = datetime.now()
     weekday = now.weekday() # 0=Mon, 4=Fri, 5=Sat, 6=Sun
+    market_close_time = time(16, 0) # 4:00 PM IST
     
-    if weekday == 4: # Friday -> Monday (+3 days)
-        next_day = now + timedelta(days=3)
+    if weekday < 5: # Monday to Friday
+        if now.time() < market_close_time:
+            next_day = now # Update happens later today!
+        else:
+            if weekday == 4: # Friday after 4 PM -> Monday (+3 days)
+                next_day = now + timedelta(days=3)
+            else: # Mon-Thu after 4 PM -> Tomorrow (+1 day)
+                next_day = now + timedelta(days=1)
     elif weekday == 5: # Saturday -> Monday (+2 days)
         next_day = now + timedelta(days=2)
-    elif weekday == 6: # Sunday -> Monday (+1 day)
-        next_day = now + timedelta(days=1)
-    else: # Mon-Thu -> Tomorrow (+1 day)
+    else: # Sunday -> Monday (+1 day)
         next_day = now + timedelta(days=1)
         
     return next_day.strftime("%d/%m/%Y")
